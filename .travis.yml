@@ -1,11 +1,17 @@
 sudo: required
 dist: trusty
 language: cpp
+language: php
 
 compiler:
     - gcc
 
+php:
+    - '5.6'
+    - '7.2'
+
 before_install:
+    - php --ini
     - sudo add-apt-repository -y ppa:kojoley/boost
     - sudo apt-get update -y || echo "update error"
     - lsb_release -a
@@ -15,14 +21,22 @@ install:
     - ls /usr/local/lib/libboost*
     - sudo ldconfig
     - sudo apt-get install -y -qq cmake 
+    - git clone https://github.com/yyzybb537/libgo /tmp/libgo
+    - pushd .
+    - cd /tmp/libgo && mkdir build && cd build
+    - sudo rm * -rf && cmake .. -DENABLE_BOOST_CONTEXT=ON && make -j4 && sudo make install
+    - sudo ldconfig
 
 script: 
-    - mkdir build; pushd build;
-    - cmake .. && make -j4 && make test_small && make tutorial && make run_test
-    - sudo rm * -rf && cmake .. -DWITH_SAFE_SIGNAL=ON && make -j4 && make test_small && make tutorial && make run_test
-    - sudo rm * -rf && cmake .. -DENABLE_BOOST_CONTEXT=ON && make -j4 && make test_small && make tutorial && make run_test
-    - sudo rm * -rf && cmake .. -DENABLE_BOOST_CONTEXT=ON -DWITH_SAFE_SIGNAL=ON && make -j4 && make test_small && make tutorial && make run_test
-    - popd;
+    - popd
+    - phpize
+    - ./configure --with-php-config=`which php-config`
+    - make clean && make && make install
+    - echo "extension=phpgo.so" > `php --ini | grep "Scan for additional" | awk '{print $7 "/phpgo.ini"}'`
+    - export TEST_PHP_EXECUTABLE=./test_php 
+    - php run-tests.php tests > test_result.txt 
+    - cat test_result.txt
+    - cat test_result.txt | grep "Tests failed" | awk '{print $4}'
 
 after_success:
     - 
@@ -34,5 +48,3 @@ branches:
 
 notifications:
   email: true
-
-
