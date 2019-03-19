@@ -34,6 +34,7 @@ namespace co {
         FdManager::getInstance().get_fd_ctx(socketfd);
     }
     static thread_local CoMutex g_dns_mtx;
+	static thread_local CoMutex g_dns_getaddrinfo_mtx;
 
     int libgo_epoll_wait(int epfd, struct epoll_event *events, int maxevents, int timeout)
     {
@@ -349,6 +350,7 @@ gethostbyname_r_t gethostbyname_r_f = NULL;
 gethostbyname2_r_t gethostbyname2_r_f = NULL;
 gethostbyaddr_r_t gethostbyaddr_r_f = NULL;
 epoll_wait_t epoll_wait_f = NULL;
+getaddrinfo_t getaddrinfo_f = NULL;
 
 int connect(int fd, const struct sockaddr *addr, socklen_t addrlen)
 {
@@ -1129,6 +1131,23 @@ sighandler_t signal(int signum, sighandler_t handler)
 }
 #endif
 
+#if defined(CO_DYNAMIC_LINK)
+int getaddrinfo(const char *__restrict host,
+        const char *__restrict service,
+        const struct addrinfo *__restrict hint,
+        struct addrinfo **__restrict res)
+{
+    if (!getaddrinfo_f) coroutine_hook_init();
+	
+    Task* tk = g_Scheduler.GetCurrentTask();
+    DebugPrint(dbg_hook, "task(%s) hook getaddrinfo(host=%s, service=%s).",
+            tk ? tk->DebugInfo() : "nil", host ? host : "", service ? service : "");
+			
+    std::unique_lock<CoMutex> lock(g_dns_getaddrinfo_mtx);
+    return getaddrinfo_f(host, service, hint, res);
+}
+#endif
+
 #if !defined(CO_DYNAMIC_LINK)
 extern int __connect(int fd, const struct sockaddr *addr, socklen_t addrlen);
 extern ssize_t __read(int fd, void *buf, size_t count);
@@ -1223,6 +1242,7 @@ void coroutine_hook_init()
     gethostbyname2_r_f = (gethostbyname2_r_t)dlsym(RTLD_NEXT, "gethostbyname2_r");
     gethostbyaddr_r_f = (gethostbyaddr_r_t)dlsym(RTLD_NEXT, "gethostbyaddr_r");
     epoll_wait_f = (epoll_wait_t)dlsym(RTLD_NEXT, "epoll_wait");
+	getaddrinfo_f = (getaddrinfo_t)dlsym(RTLD_NEXT, "getaddrinfo");
 #else
     connect_f = &__connect;
     read_f = &__read;
@@ -1254,13 +1274,14 @@ void coroutine_hook_init()
     gethostbyname2_r_f = &__gethostbyname2_r;
     gethostbyaddr_r_f = &__gethostbyaddr_r;
     epoll_wait_f = &::epoll_wait;
+	getaddrinfo_f = &::getaddrinfo;
 #endif
 
     if (!connect_f || !read_f || !write_f || !readv_f || !writev_f || !send_f
             || !sendto_f || !sendmsg_f || !accept_f || !poll_f || !select_f
             || !sleep_f|| !usleep_f || !nanosleep_f || !close_f || !fcntl_f || !setsockopt_f
             || !getsockopt_f || !dup_f || !dup2_f || !fclose_f || !gethostbyname_r_f
-            || !gethostbyname2_r_f || !gethostbyaddr_r_f || !epoll_wait_f
+            || !gethostbyname2_r_f || !gethostbyaddr_r_f || !epoll_wait_f || !getaddrinfo_f
             // 老版本linux中没有dup3, 无需校验
             // || !dup3_f
             )

@@ -117,6 +117,14 @@ typedef int (*gethostbyaddr_r_t) (const void *addr, socklen_t len, int type,
         struct hostent **result, int *h_errnop);
 extern gethostbyaddr_r_t gethostbyaddr_r_f;
 
+// getaddrinfo
+// getaddrinfo_r
+typedef int (*getaddrinfo_t) (const char *__restrict host,
+                const char *__restrict service,
+                const struct addrinfo *__restrict hint,
+                struct addrinfo **__restrict res);
+extern getaddrinfo_t getaddrinfo_f;
+
 } //extern "C"
 
 namespace co {
